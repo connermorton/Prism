@@ -259,8 +259,13 @@ function GraphVisualization({ data, onNodeClick, sharedNodeLabels }) {
 // ─────────────────────────────────────────────────────────
 // NodeDetail
 // ─────────────────────────────────────────────────────────
-function NodeDetail({ node, onClose, onExplore, isMobile }) {
+function NodeDetail({ node, onClose, onExplore, isMobile, connections, onNavigateToExploration }) {
   if (!node) return null;
+
+  // Find explorations this node also appears in (bridge node detection)
+  const appearsIn = (connections || []).filter(conn =>
+    (conn.sharedNodes || []).some(n => n.label?.toLowerCase() === node.label?.toLowerCase())
+  );
 
   const mobileStyle = {
     position: "absolute",
@@ -323,6 +328,43 @@ function NodeDetail({ node, onClose, onExplore, isMobile }) {
         }}>
           <div style={{ fontSize: 10, color: "#616E88", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "'JetBrains Mono', monospace" }}>Key Insight</div>
           <div style={{ color: "#D8DEE9", fontSize: 14, lineHeight: 1.7, fontStyle: "italic" }}>{node.keyInsight}</div>
+        </div>
+      )}
+      {appearsIn.length > 0 && (
+        <div style={{
+          background: "#88C0D008",
+          border: "1px solid #88C0D022",
+          borderRadius: 8, padding: "12px 14px",
+          marginBottom: 12,
+        }}>
+          <div style={{
+            fontSize: 10, color: "#88C0D077",
+            textTransform: "uppercase", letterSpacing: "0.08em",
+            marginBottom: 8, fontFamily: "'JetBrains Mono', monospace",
+            display: "flex", alignItems: "center", gap: 5,
+          }}>
+            <span>⬡</span> Also in {appearsIn.length} other exploration{appearsIn.length !== 1 ? "s" : ""}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {appearsIn.map((conn, i) => (
+              <button
+                key={i}
+                onClick={() => onNavigateToExploration && onNavigateToExploration(conn.exploration.id)}
+                style={{
+                  background: "none", border: "none", padding: "2px 0",
+                  textAlign: "left", cursor: "pointer",
+                  color: "#7A8394", fontSize: 12,
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  lineHeight: 1.4,
+                  transition: "color 0.15s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = "#88C0D0"}
+                onMouseLeave={e => e.currentTarget.style.color = "#7A8394"}
+              >
+                {conn.exploration.claim} →
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {!node.isRoot && (
@@ -563,7 +605,7 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, connect
             background: "#1a1d23",
             borderRadius: 8,
             borderLeft: "3px solid #88C0D044",
-            display: "flex", flexDirection: "column", gap: 6,
+            display: "flex", flexDirection: "column", gap: 8,
           }}>
             <button
               onClick={() => onNavigateToExploration && onNavigateToExploration(conn.exploration.id)}
@@ -577,15 +619,21 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, connect
               {conn.exploration.claim} →
             </button>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {conn.sharedNodes.map(n => (
-                <span key={n.id} style={{
-                  fontSize: 11, color: "#616E88", background: "#2E3440",
-                  borderRadius: 4, padding: "2px 8px",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>
-                  {n.label}
-                </span>
-              ))}
+              {conn.sharedNodes.map(n => {
+                const eraColor = getEraColor(n.era);
+                return (
+                  <span key={n.id} style={{
+                    fontSize: 11,
+                    color: eraColor,
+                    background: eraColor + "18",
+                    border: `1px solid ${eraColor}33`,
+                    borderRadius: 4, padding: "2px 8px",
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}>
+                    {n.label}
+                  </span>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -1449,6 +1497,8 @@ export default function Prism() {
               onClose={() => setSelectedNode(null)}
               onExplore={(label) => { setClaim(label); traceLineage(label); }}
               isMobile={isMobile}
+              connections={connections}
+              onNavigateToExploration={(id) => { navigateToExploration(id); setViewMode("graph"); }}
             />
 
             {/* Era legend — desktop only */}

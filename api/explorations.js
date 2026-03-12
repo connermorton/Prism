@@ -172,7 +172,7 @@ export default async function handler(req, res) {
           // Fetch names for the response
           const [{ data: otherExpl }, { data: sharedNodes }] = await Promise.all([
             supabase.from('explorations').select('id, claim').eq('id', otherExplId).single(),
-            supabase.from('nodes').select('id, label, thinker').in('id', sharedNodeIds),
+            supabase.from('nodes').select('id, label, thinker, era').in('id', sharedNodeIds),
           ]);
 
           if (otherExpl && sharedNodes) {
