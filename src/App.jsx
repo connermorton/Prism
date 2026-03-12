@@ -195,7 +195,7 @@ function GraphVisualization({ data, onNodeClick }) {
       .attr("font-size", d => d.isRoot ? "13px" : "11px")
       .attr("font-family", "'Space Grotesk', sans-serif")
       .attr("font-weight", d => d.isRoot ? "700" : "500")
-      .text(d => d.label.length > 24 ? d.label.slice(0, 22) + "…" : d.label);
+      .text(d => d.label.length > 32 ? d.label.slice(0, 30) + "…" : d.label);
 
     node.append("text")
       .attr("dy", d => (d.isRoot ? 24 : 18) + 30)
@@ -229,7 +229,7 @@ function NodeDetail({ node, onClose, onExplore }) {
   if (!node) return null;
   return (
     <div style={{
-      position: "absolute", right: 20, top: 20, bottom: 80,
+      position: "absolute", right: 20, top: 20, bottom: 52,
       width: 340, background: "#1a1d23", border: "1px solid #2E3440",
       borderRadius: 12, padding: 24, overflowY: "auto",
       boxShadow: "0 8px 32px rgba(0,0,0,0.4)", zIndex: 10,
@@ -261,7 +261,7 @@ function NodeDetail({ node, onClose, onExplore }) {
       {node.description && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 10, color: "#616E88", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Description</div>
-          <div style={{ color: "#A3AEC2", fontSize: 13, lineHeight: 1.6 }}>{node.description}</div>
+          <div style={{ color: "#A3AEC2", fontSize: 14, lineHeight: 1.7 }}>{node.description}</div>
         </div>
       )}
       {node.keyInsight && (
@@ -270,7 +270,7 @@ function NodeDetail({ node, onClose, onExplore }) {
           borderLeft: `3px solid ${getEraColor(node.era)}`
         }}>
           <div style={{ fontSize: 10, color: "#616E88", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "'JetBrains Mono', monospace" }}>Key Insight</div>
-          <div style={{ color: "#D8DEE9", fontSize: 13, lineHeight: 1.5, fontStyle: "italic" }}>{node.keyInsight}</div>
+          <div style={{ color: "#D8DEE9", fontSize: 14, lineHeight: 1.7, fontStyle: "italic" }}>{node.keyInsight}</div>
         </div>
       )}
       {!node.isRoot && (
@@ -288,9 +288,74 @@ function NodeDetail({ node, onClose, onExplore }) {
   );
 }
 
-function SynthesisPanel({ synthesis, deepSynthesis, deepLoading, claim, nodeCount }) {
-  const [expanded, setExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState("deep");
+function SynthesisBar({ synthesis, deepSynthesis, deepLoading, onReadClick }) {
+  if (!synthesis) return null;
+
+  const previewText = deepSynthesis
+    ? deepSynthesis
+    : deepLoading
+      ? "Finding the blind spot..."
+      : synthesis;
+
+  return (
+    <div style={{
+      position: "absolute", bottom: 0, left: 0, right: 0,
+      height: 44,
+      background: "#13161cF2",
+      borderTop: "1px solid #2E3440",
+      display: "flex", alignItems: "center",
+      padding: "0 16px",
+      zIndex: 8,
+      backdropFilter: "blur(12px)",
+      gap: 10,
+    }}>
+      {deepLoading && !deepSynthesis && (
+        <span style={{
+          display: "inline-block", width: 12, height: 12,
+          border: "1.5px solid #2E3440", borderTopColor: "#88C0D0",
+          borderRadius: "50%", animation: "spin 0.8s linear infinite",
+          flexShrink: 0
+        }} />
+      )}
+      {deepSynthesis && (
+        <span style={{ fontSize: 10, color: "#88C0D0", fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>⬡</span>
+      )}
+      <span style={{
+        color: deepSynthesis ? "#A3AEC2" : "#616E88",
+        fontSize: 13,
+        fontFamily: "'Space Grotesk', sans-serif",
+        flex: 1,
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        textOverflow: "ellipsis",
+        fontStyle: deepLoading && !deepSynthesis ? "italic" : "normal",
+      }}>
+        {previewText}
+      </span>
+      <button
+        onClick={onReadClick}
+        style={{
+          background: "none", border: "none",
+          color: "#88C0D0", fontSize: 12,
+          fontFamily: "'JetBrains Mono', monospace",
+          cursor: "pointer", flexShrink: 0,
+          padding: "4px 10px",
+          borderRadius: 6,
+          letterSpacing: "0.04em",
+          transition: "background 0.2s",
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = "#88C0D015"}
+        onMouseLeave={e => e.currentTarget.style.background = "none"}
+      >
+        Read →
+      </button>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes }) {
+  const [activeTab, setActiveTab] = useState("lineage");
 
   useEffect(() => {
     if (deepSynthesis) setActiveTab("deep");
@@ -299,8 +364,6 @@ function SynthesisPanel({ synthesis, deepSynthesis, deepLoading, claim, nodeCoun
   useEffect(() => {
     if (!deepSynthesis && synthesis) setActiveTab("lineage");
   }, [synthesis, deepSynthesis]);
-
-  if (!synthesis) return null;
 
   const tabs = [
     { id: "lineage", label: "Lineage" },
@@ -311,20 +374,34 @@ function SynthesisPanel({ synthesis, deepSynthesis, deepLoading, claim, nodeCoun
 
   return (
     <div style={{
-      position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
-      width: expanded ? "min(720px, calc(100% - 420px))" : "280px",
-      background: "#13161cF5", border: "1px solid #2E3440",
-      borderRadius: 14, zIndex: 8,
-      boxShadow: "0 -4px 28px rgba(0,0,0,0.5)",
+      position: "absolute", inset: 0,
+      overflowY: "auto",
+      padding: "40px 24px 60px",
       fontFamily: "'Space Grotesk', sans-serif",
-      backdropFilter: "blur(20px)",
-      transition: "width 0.3s ease"
+      zIndex: 10,
+      background: "#0d1017",
     }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 20px", borderBottom: expanded ? "1px solid #2E344088" : "none",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        {/* Claim header */}
+        <h2 style={{
+          fontFamily: "'Instrument Serif', serif",
+          fontSize: 28,
+          fontWeight: 400,
+          color: "#ECEFF4",
+          marginTop: 0,
+          marginBottom: 32,
+          lineHeight: 1.3,
+          letterSpacing: "-0.01em",
+        }}>
+          {claim}
+        </h2>
+
+        {/* Tabs */}
+        <div style={{
+          display: "flex",
+          borderBottom: "1px solid #2E3440",
+          marginBottom: 28,
+        }}>
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;
             const isAvailable = tab.id === "lineage" || deepSynthesis || tab.loading;
@@ -333,20 +410,20 @@ function SynthesisPanel({ synthesis, deepSynthesis, deepLoading, claim, nodeCoun
                 key={tab.id}
                 onClick={() => {
                   if (tab.id === "lineage" || deepSynthesis) setActiveTab(tab.id);
-                  if (!expanded) setExpanded(true);
                 }}
                 style={{
                   background: "none", border: "none",
-                  padding: "12px 16px 10px",
+                  padding: "10px 16px 8px",
                   color: isActive ? "#88C0D0" : "#4C566A",
                   fontSize: 11, fontWeight: isActive ? 600 : 400,
                   fontFamily: "'JetBrains Mono', monospace",
                   textTransform: "uppercase", letterSpacing: "0.08em",
                   cursor: isAvailable ? "pointer" : "default",
-                  borderBottom: isActive && expanded ? "2px solid #88C0D0" : "2px solid transparent",
+                  borderBottom: isActive ? "2px solid #88C0D0" : "2px solid transparent",
+                  marginBottom: -1,
                   transition: "all 0.2s",
                   display: "flex", alignItems: "center", gap: 6,
-                  opacity: isAvailable ? 1 : 0.4
+                  opacity: isAvailable ? 1 : 0.4,
                 }}
               >
                 {tab.id === "lineage" && <span style={{ fontSize: 10 }}>◈</span>}
@@ -364,76 +441,84 @@ function SynthesisPanel({ synthesis, deepSynthesis, deepLoading, claim, nodeCoun
           })}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {nodeCount && (
-            <span style={{ fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace" }}>
-              {nodeCount} nodes
-            </span>
-          )}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            style={{
-              background: "none", border: "none", padding: "4px",
-              color: "#4C566A", fontSize: 14, cursor: "pointer",
-              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 0.2s", display: "inline-block", lineHeight: 1
-            }}
-          >▾</button>
-        </div>
-      </div>
+        {/* Loading state for blind spot */}
+        {activeTab === "deep" && deepLoading && !deepSynthesis && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12,
+            color: "#616E88", fontSize: 14, fontStyle: "italic",
+            fontFamily: "'Space Grotesk', sans-serif",
+            padding: "8px 0", marginBottom: 40,
+          }}>
+            <span style={{
+              display: "inline-block", width: 14, height: 14,
+              border: "2px solid #2E3440", borderTopColor: "#88C0D0",
+              borderRadius: "50%", animation: "spin 0.8s linear infinite",
+              flexShrink: 0
+            }} />
+            Searching for what both sides are missing...
+          </div>
+        )}
 
-      {expanded && (
-        <div style={{ padding: "14px 22px 20px" }}>
-          {claim && (
+        {/* Synthesis content */}
+        {(activeTab === "lineage" || deepSynthesis) && activeContent && (
+          <div style={{
+            color: "#D8DEE9",
+            fontSize: 19,
+            lineHeight: 1.8,
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontWeight: 400,
+            marginBottom: 52,
+            letterSpacing: "0.01em",
+          }}>
+            {activeContent}
+          </div>
+        )}
+
+        {/* Node cards */}
+        {nodes && nodes.length > 0 && (
+          <div>
             <div style={{
-              fontSize: 11, color: "#616E88", marginBottom: 14,
+              fontSize: 10, color: "#4C566A",
               fontFamily: "'JetBrains Mono', monospace",
-              display: "-webkit-box", WebkitLineClamp: 1,
-              WebkitBoxOrient: "vertical", overflow: "hidden"
+              textTransform: "uppercase", letterSpacing: "0.1em",
+              marginBottom: 14,
             }}>
-              ◈ {claim}
+              {nodes.length} nodes in lineage
             </div>
-          )}
-
-          {activeTab === "deep" && deepLoading && !deepSynthesis && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              color: "#616E88", fontSize: 13, fontStyle: "italic",
-              fontFamily: "'Instrument Serif', serif", padding: "8px 0"
-            }}>
-              <span style={{
-                display: "inline-block", width: 14, height: 14,
-                border: "2px solid #2E3440", borderTopColor: "#88C0D0",
-                borderRadius: "50%", animation: "spin 0.8s linear infinite",
-                flexShrink: 0
-              }} />
-              Searching for what both sides are missing...
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {nodes.map(node => (
+                <div key={node.id} style={{
+                  padding: "12px 16px",
+                  background: "#1a1d23",
+                  borderRadius: 8,
+                  borderLeft: `3px solid ${getEraColor(node.era)}`,
+                  display: "flex", flexDirection: "column", gap: 4,
+                }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                    <span style={{ color: "#D8DEE9", fontSize: 14, fontWeight: 600 }}>
+                      {node.label}
+                    </span>
+                    {node.isRoot && (
+                      <span style={{
+                        fontSize: 9, color: "#88C0D0",
+                        fontFamily: "'JetBrains Mono', monospace",
+                        textTransform: "uppercase", letterSpacing: "0.1em",
+                      }}>root</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <span style={{ color: "#7A8394", fontSize: 12 }}>{node.thinker}</span>
+                    <span style={{
+                      color: "#4C566A", fontSize: 10,
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}>{node.period}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-
-          {(activeTab === "lineage" || deepSynthesis) && (
-            <div style={{
-              color: activeTab === "deep" ? "#D8DEE9" : "#C8CED8",
-              fontSize: 15, lineHeight: 1.8,
-              fontFamily: "'Instrument Serif', serif",
-              letterSpacing: "0.01em"
-            }}>
-              {activeContent}
-            </div>
-          )}
-
-          {activeTab === "deep" && deepSynthesis && (
-            <div style={{
-              marginTop: 12, paddingTop: 10, borderTop: "1px solid #2E344066",
-              fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace",
-              textTransform: "uppercase", letterSpacing: "0.1em"
-            }}>
-              ⬡ Second-pass analysis — the unstated assumption
-            </div>
-          )}
-        </div>
-      )}
-
+          </div>
+        )}
+      </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -461,6 +546,7 @@ export default function Prism() {
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(true);
+  const [viewMode, setViewMode] = useState("graph");
 
   const cacheRef = useRef(new Map());
 
@@ -515,6 +601,8 @@ export default function Prism() {
   const traceLineage = useCallback(async (inputClaim) => {
     const c = inputClaim || claim;
     if (!c.trim()) return;
+
+    setViewMode("graph");
 
     if (cacheRef.current.has(c)) {
       loadFromCache(c);
@@ -575,6 +663,8 @@ export default function Prism() {
     }
   };
 
+  const historyVisible = showHistory && history.length > 0 && graphData;
+
   return (
     <div style={{
       width: "100vw", height: "100vh", background: "#0d1017",
@@ -611,23 +701,60 @@ export default function Prism() {
           }}>Knowledge Lineage Engine</span>
         </div>
 
-        {history.length > 0 && graphData && (
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            style={{
-              background: showHistory ? "#1a1d23" : "transparent",
-              border: "1px solid #2E3440", borderRadius: 8,
-              padding: "6px 14px", color: showHistory ? "#88C0D0" : "#616E88",
-              fontSize: 11, cursor: "pointer",
-              fontFamily: "'JetBrains Mono', monospace",
-              display: "flex", alignItems: "center", gap: 6,
-              transition: "all 0.2s"
-            }}
-          >
-            <span style={{ fontSize: 13 }}>☰</span>
-            {history.length} exploration{history.length !== 1 ? "s" : ""}
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Graph / Read toggle */}
+          {graphData && (
+            <div style={{
+              display: "flex",
+              background: "#1a1d23",
+              border: "1px solid #2E3440",
+              borderRadius: 8,
+              padding: 3,
+              gap: 2,
+            }}>
+              {["graph", "read"].map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  style={{
+                    background: viewMode === mode ? "#2E3440" : "transparent",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "5px 13px",
+                    color: viewMode === mode ? "#ECEFF4" : "#4C566A",
+                    fontSize: 11,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {mode === "graph" ? "Graph" : "Read"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* History toggle */}
+          {history.length > 0 && graphData && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              style={{
+                background: showHistory ? "#1a1d23" : "transparent",
+                border: "1px solid #2E3440", borderRadius: 8,
+                padding: "6px 14px", color: showHistory ? "#88C0D0" : "#616E88",
+                fontSize: 11, cursor: "pointer",
+                fontFamily: "'JetBrains Mono', monospace",
+                display: "flex", alignItems: "center", gap: 6,
+                transition: "all 0.2s"
+              }}
+            >
+              <span style={{ fontSize: 13 }}>☰</span>
+              {history.length} exploration{history.length !== 1 ? "s" : ""}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main */}
@@ -703,108 +830,123 @@ export default function Prism() {
           </div>
         )}
 
-        {graphData && (
-          <GraphVisualization data={graphData} onNodeClick={setSelectedNode} />
-        )}
+        {/* Graph mode */}
+        {graphData && viewMode === "graph" && (
+          <>
+            <GraphVisualization data={graphData} onNodeClick={setSelectedNode} />
 
-        <NodeDetail
-          node={selectedNode}
-          onClose={() => setSelectedNode(null)}
-          onExplore={(label) => { setClaim(label); traceLineage(label); }}
-        />
+            <NodeDetail
+              node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onExplore={(label) => { setClaim(label); traceLineage(label); }}
+            />
 
-        {showHistory && history.length > 0 && graphData && (
-          <div style={{
-            position: "absolute", left: 20, top: 20,
-            width: 280, maxHeight: "calc(100% - 120px)",
-            background: "#13161cF5", border: "1px solid #2E3440",
-            borderRadius: 12, zIndex: 6, overflowY: "auto",
-            boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-            backdropFilter: "blur(12px)"
-          }}>
-            <div style={{
-              padding: "14px 18px 10px", borderBottom: "1px solid #2E344088",
-              display: "flex", alignItems: "center", justifyContent: "space-between"
-            }}>
-              <span style={{
-                fontSize: 11, color: "#88C0D0", textTransform: "uppercase",
-                letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace",
-                fontWeight: 500
-              }}>Explorations</span>
-              <span style={{
-                fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
-              }}>{history.length} cached</span>
-            </div>
-            <div style={{ padding: "6px 8px 8px" }}>
-              {history.map((h, i) => {
-                const isActive = h.claim === activeClaim;
-                return (
-                  <button
-                    key={h.claim + "-" + h.timestamp}
-                    onClick={() => handleHistoryClick(h.claim)}
-                    style={{
-                      display: "flex", width: "100%", textAlign: "left",
-                      background: isActive ? "#88C0D00F" : "transparent",
-                      border: isActive ? "1px solid #88C0D025" : "1px solid transparent",
-                      borderRadius: 8, padding: "10px 12px", marginBottom: 2,
-                      color: isActive ? "#88C0D0" : "#7A8394",
-                      fontSize: 12, cursor: "pointer",
-                      fontFamily: "'Space Grotesk', sans-serif",
-                      transition: "all 0.15s", alignItems: "flex-start", gap: 10,
-                      lineHeight: 1.4
-                    }}
-                    onMouseEnter={e => {
-                      if (!isActive) { e.currentTarget.style.background = "#1a1d2388"; e.currentTarget.style.color = "#C8CED8"; }
-                    }}
-                    onMouseLeave={e => {
-                      if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#7A8394"; }
-                    }}
-                  >
-                    <span style={{
-                      color: isActive ? "#88C0D0" : "#3B4252",
-                      fontSize: 10, marginTop: 2, flexShrink: 0
-                    }}>
-                      {isActive ? "◈" : "○"}
-                    </span>
-                    <span style={{
-                      overflow: "hidden", display: "-webkit-box",
-                      WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
-                    }}>
-                      {h.claim}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {graphData && (
-          <div style={{
-            position: "absolute", bottom: 12,
-            left: showHistory && history.length > 0 ? 320 : 20,
-            display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5, maxWidth: 300,
-            transition: "left 0.3s ease"
-          }}>
-            {Object.entries(ERAS).map(([era, color]) => (
-              <div key={era} style={{
-                display: "flex", alignItems: "center", gap: 5,
-                fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
+            {/* History panel */}
+            {historyVisible && (
+              <div style={{
+                position: "absolute", left: 20, top: 20,
+                width: 280, maxHeight: "calc(100% - 120px)",
+                background: "#13161cF5", border: "1px solid #2E3440",
+                borderRadius: 12, zIndex: 6, overflowY: "auto",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+                backdropFilter: "blur(12px)"
               }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
-                {era}
+                <div style={{
+                  padding: "14px 18px 10px", borderBottom: "1px solid #2E344088",
+                  display: "flex", alignItems: "center", justifyContent: "space-between"
+                }}>
+                  <span style={{
+                    fontSize: 11, color: "#88C0D0", textTransform: "uppercase",
+                    letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 500
+                  }}>Explorations</span>
+                  <span style={{
+                    fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
+                  }}>{history.length} cached</span>
+                </div>
+                <div style={{ padding: "6px 8px 8px" }}>
+                  {history.map((h) => {
+                    const isActive = h.claim === activeClaim;
+                    return (
+                      <button
+                        key={h.claim + "-" + h.timestamp}
+                        onClick={() => handleHistoryClick(h.claim)}
+                        style={{
+                          display: "flex", width: "100%", textAlign: "left",
+                          background: isActive ? "#88C0D00F" : "transparent",
+                          border: isActive ? "1px solid #88C0D025" : "1px solid transparent",
+                          borderRadius: 8, padding: "10px 12px", marginBottom: 2,
+                          color: isActive ? "#88C0D0" : "#7A8394",
+                          fontSize: 12, cursor: "pointer",
+                          fontFamily: "'Space Grotesk', sans-serif",
+                          transition: "all 0.15s", alignItems: "flex-start", gap: 10,
+                          lineHeight: 1.4
+                        }}
+                        onMouseEnter={e => {
+                          if (!isActive) { e.currentTarget.style.background = "#1a1d2388"; e.currentTarget.style.color = "#C8CED8"; }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#7A8394"; }
+                        }}
+                      >
+                        <span style={{
+                          color: isActive ? "#88C0D0" : "#3B4252",
+                          fontSize: 10, marginTop: 2, flexShrink: 0
+                        }}>
+                          {isActive ? "◈" : "○"}
+                        </span>
+                        <span style={{
+                          overflow: "hidden", display: "-webkit-box",
+                          WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
+                        }}>
+                          {h.claim}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* Era legend — above synthesis bar, shifts right when history visible */}
+            <div style={{
+              position: "absolute",
+              bottom: 52,
+              left: historyVisible ? 320 : 20,
+              display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5, maxWidth: 300,
+              transition: "left 0.3s ease"
+            }}>
+              {Object.entries(ERAS).map(([era, color]) => (
+                <div key={era} style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
+                }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+                  {era}
+                </div>
+              ))}
+            </div>
+
+            {/* Synthesis bar */}
+            <SynthesisBar
+              synthesis={graphData?.synthesis}
+              deepSynthesis={deepSynthesis}
+              deepLoading={deepLoading}
+              onReadClick={() => setViewMode("read")}
+            />
+          </>
         )}
 
-        <SynthesisPanel
-          synthesis={graphData?.synthesis}
-          deepSynthesis={deepSynthesis}
-          deepLoading={deepLoading}
-          claim={activeClaim}
-          nodeCount={graphData?.nodes?.length}
-        />
+        {/* Read mode */}
+        {graphData && viewMode === "read" && (
+          <ReadView
+            claim={activeClaim}
+            synthesis={graphData?.synthesis}
+            deepSynthesis={deepSynthesis}
+            deepLoading={deepLoading}
+            nodes={graphData?.nodes}
+          />
+        )}
       </div>
 
       {/* Input */}
