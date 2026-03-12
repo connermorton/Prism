@@ -7,8 +7,10 @@ function cors(res) {
 }
 
 function getSupabase() {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_ANON_KEY
+    || process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error('Supabase env vars not configured');
   return createClient(url, key);
 }
