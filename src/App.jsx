@@ -91,9 +91,13 @@ async function callAPI(system, messages, maxTokens = 4000) {
   return data;
 }
 
-function GraphVisualization({ data, onNodeClick }) {
+// ─────────────────────────────────────────────────────────
+// GraphVisualization
+// ─────────────────────────────────────────────────────────
+function GraphVisualization({ data, onNodeClick, sharedNodeLabels }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
+  const shared = sharedNodeLabels || new Set();
 
   useEffect(() => {
     if (!data || !data.nodes || data.nodes.length === 0) return;
@@ -115,6 +119,12 @@ function GraphVisualization({ data, onNodeClick }) {
     const feMerge = filter.append("feMerge");
     feMerge.append("feMergeNode").attr("in", "coloredBlur");
     feMerge.append("feMergeNode").attr("in", "SourceGraphic");
+
+    const filterShared = defs.append("filter").attr("id", "glowShared");
+    filterShared.append("feGaussianBlur").attr("stdDeviation", "5").attr("result", "coloredBlur");
+    const feMergeShared = filterShared.append("feMerge");
+    feMergeShared.append("feMergeNode").attr("in", "coloredBlur");
+    feMergeShared.append("feMergeNode").attr("in", "SourceGraphic");
 
     defs.append("marker")
       .attr("id", "arrow")
@@ -188,6 +198,17 @@ function GraphVisualization({ data, onNodeClick }) {
         onNodeClick(orig || d);
       });
 
+    // Shared-node outer ring (pulsing dashed)
+    node.filter(d => shared.has(d.label?.toLowerCase()))
+      .append("circle")
+      .attr("r", d => (d.isRoot ? 24 : 18) + 7)
+      .attr("fill", "none")
+      .attr("stroke", "#88C0D0")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "4,3")
+      .attr("opacity", 0.7)
+      .attr("filter", "url(#glowShared)");
+
     node.append("circle")
       .attr("r", d => d.isRoot ? 24 : 18)
       .attr("fill", d => {
@@ -226,7 +247,7 @@ function GraphVisualization({ data, onNodeClick }) {
     });
 
     return () => simulation.stop();
-  }, [data, onNodeClick]);
+  }, [data, onNodeClick, sharedNodeLabels]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }}>
@@ -235,6 +256,9 @@ function GraphVisualization({ data, onNodeClick }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// NodeDetail
+// ─────────────────────────────────────────────────────────
 function NodeDetail({ node, onClose, onExplore, isMobile }) {
   if (!node) return null;
 
@@ -316,6 +340,9 @@ function NodeDetail({ node, onClose, onExplore, isMobile }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// SynthesisBar
+// ─────────────────────────────────────────────────────────
 function SynthesisBar({ synthesis, deepSynthesis, deepLoading, onReadClick }) {
   if (!synthesis) return null;
 
@@ -382,6 +409,9 @@ function SynthesisBar({ synthesis, deepSynthesis, deepLoading, onReadClick }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// NodeCards
+// ─────────────────────────────────────────────────────────
 function NodeCards({ nodes }) {
   if (!nodes || nodes.length === 0) return null;
   return (
@@ -404,9 +434,7 @@ function NodeCards({ nodes }) {
             display: "flex", flexDirection: "column", gap: 3,
           }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ color: "#D8DEE9", fontSize: 13, fontWeight: 600 }}>
-                {node.label}
-              </span>
+              <span style={{ color: "#D8DEE9", fontSize: 13, fontWeight: 600 }}>{node.label}</span>
               {node.isRoot && (
                 <span style={{
                   fontSize: 9, color: "#88C0D0",
@@ -417,10 +445,7 @@ function NodeCards({ nodes }) {
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ color: "#7A8394", fontSize: 12 }}>{node.thinker}</span>
-              <span style={{
-                color: "#4C566A", fontSize: 10,
-                fontFamily: "'JetBrains Mono', monospace",
-              }}>{node.period}</span>
+              <span style={{ color: "#4C566A", fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}>{node.period}</span>
             </div>
           </div>
         ))}
@@ -429,7 +454,10 @@ function NodeCards({ nodes }) {
   );
 }
 
-function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobile }) {
+// ─────────────────────────────────────────────────────────
+// ReadView
+// ─────────────────────────────────────────────────────────
+function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, connections, isMobile, onNavigateToExploration }) {
   const [activeTab, setActiveTab] = useState("lineage");
 
   useEffect(() => {
@@ -448,20 +476,14 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobil
   const activeContent = activeTab === "deep" && deepSynthesis ? deepSynthesis : synthesis;
 
   const tabBar = (
-    <div style={{
-      display: "flex",
-      borderBottom: "1px solid #2E3440",
-      marginBottom: 24,
-    }}>
+    <div style={{ display: "flex", borderBottom: "1px solid #2E3440", marginBottom: 24 }}>
       {tabs.map(tab => {
         const isActive = activeTab === tab.id;
         const isAvailable = tab.id === "lineage" || deepSynthesis || tab.loading;
         return (
           <button
             key={tab.id}
-            onClick={() => {
-              if (tab.id === "lineage" || deepSynthesis) setActiveTab(tab.id);
-            }}
+            onClick={() => { if (tab.id === "lineage" || deepSynthesis) setActiveTab(tab.id); }}
             style={{
               background: "none", border: "none",
               padding: "10px 16px 8px",
@@ -511,15 +533,11 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobil
           Searching for what both sides are missing...
         </div>
       )}
-
       {(activeTab === "lineage" || deepSynthesis) && activeContent && (
         <div style={{
-          color: "#D8DEE9",
-          fontSize: 19,
-          lineHeight: 1.8,
+          color: "#D8DEE9", fontSize: 19, lineHeight: 1.8,
           fontFamily: "'Space Grotesk', sans-serif",
-          fontWeight: 400,
-          letterSpacing: "0.01em",
+          fontWeight: 400, letterSpacing: "0.01em",
         }}>
           {activeContent}
         </div>
@@ -527,32 +545,80 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobil
     </>
   );
 
-  // Mobile: single column, scrollable
+  const connectionsSection = connections && connections.length > 0 && (
+    <div style={{ marginTop: 40, paddingTop: 32, borderTop: "1px solid #2E344066" }}>
+      <div style={{
+        fontSize: 10, color: "#88C0D0",
+        fontFamily: "'JetBrains Mono', monospace",
+        textTransform: "uppercase", letterSpacing: "0.1em",
+        marginBottom: 16,
+        display: "flex", alignItems: "center", gap: 6,
+      }}>
+        <span>⬡</span> Shared intellectual ancestors
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {connections.map((conn, i) => (
+          <div key={i} style={{
+            padding: "12px 16px",
+            background: "#1a1d23",
+            borderRadius: 8,
+            borderLeft: "3px solid #88C0D044",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <button
+              onClick={() => onNavigateToExploration && onNavigateToExploration(conn.exploration.id)}
+              style={{
+                background: "none", border: "none", padding: 0, textAlign: "left",
+                color: "#88C0D0", fontSize: 13, fontWeight: 600,
+                fontFamily: "'Space Grotesk', sans-serif",
+                cursor: "pointer",
+              }}
+            >
+              {conn.exploration.claim} →
+            </button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {conn.sharedNodes.map(n => (
+                <span key={n.id} style={{
+                  fontSize: 11, color: "#616E88", background: "#2E3440",
+                  borderRadius: 4, padding: "2px 8px",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}>
+                  {n.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const claimHeader = (
+    <h2 style={{
+      fontFamily: "'Instrument Serif', serif",
+      fontSize: isMobile ? 22 : 28,
+      fontWeight: 400, color: "#ECEFF4",
+      marginTop: 0, marginBottom: 32,
+      lineHeight: 1.3, letterSpacing: "-0.01em",
+    }}>
+      {claim}
+    </h2>
+  );
+
+  // Mobile: single column
   if (isMobile) {
     return (
       <div style={{
-        position: "absolute", inset: 0,
-        overflowY: "auto",
+        position: "absolute", inset: 0, overflowY: "auto",
         padding: "28px 20px 40px",
         fontFamily: "'Space Grotesk', sans-serif",
-        zIndex: 10,
-        background: "#0d1017",
+        zIndex: 10, background: "#0d1017",
       }}>
-        <h2 style={{
-          fontFamily: "'Instrument Serif', serif",
-          fontSize: 22,
-          fontWeight: 400,
-          color: "#ECEFF4",
-          marginTop: 0,
-          marginBottom: 24,
-          lineHeight: 1.3,
-          letterSpacing: "-0.01em",
-        }}>
-          {claim}
-        </h2>
+        {claimHeader}
         {tabBar}
         <div style={{ marginBottom: 36 }}>{synthesisContent}</div>
         <NodeCards nodes={nodes} />
+        {connectionsSection}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -561,77 +627,256 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobil
   // Desktop: split pane
   return (
     <div style={{
-      position: "absolute", inset: 0,
-      display: "flex",
+      position: "absolute", inset: 0, display: "flex",
       fontFamily: "'Space Grotesk', sans-serif",
-      zIndex: 10,
-      background: "#0d1017",
+      zIndex: 10, background: "#0d1017",
     }}>
-      {/* Left pane — synthesis */}
+      {/* Left — synthesis */}
       <div style={{
-        flex: "0 0 58%",
-        borderRight: "1px solid #1a1d23",
-        overflowY: "auto",
-        padding: "40px 40px 60px",
+        flex: "0 0 58%", borderRight: "1px solid #1a1d23",
+        overflowY: "auto", padding: "40px 40px 60px",
         display: "flex", flexDirection: "column",
       }}>
-        <h2 style={{
-          fontFamily: "'Instrument Serif', serif",
-          fontSize: 28,
-          fontWeight: 400,
-          color: "#ECEFF4",
-          marginTop: 0,
-          marginBottom: 32,
-          lineHeight: 1.3,
-          letterSpacing: "-0.01em",
-        }}>
-          {claim}
-        </h2>
+        {claimHeader}
         {tabBar}
         {synthesisContent}
+        {connectionsSection}
       </div>
-
-      {/* Right pane — node cards */}
+      {/* Right — node cards */}
       <div style={{
-        flex: "0 0 42%",
-        overflowY: "auto",
-        padding: "40px 28px 60px",
-        background: "#0b0e14",
+        flex: "0 0 42%", overflowY: "auto",
+        padding: "40px 28px 60px", background: "#0b0e14",
       }}>
         <NodeCards nodes={nodes} />
       </div>
-
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-// History panel — side panel on desktop, full-screen drawer on mobile
+// ─────────────────────────────────────────────────────────
+// MapView — meta-graph of explorations
+// ─────────────────────────────────────────────────────────
+function MapView({ onNavigateToExploration }) {
+  const svgRef = useRef(null);
+  const containerRef = useRef(null);
+  const [mapData, setMapData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/connections')
+      .then(r => r.json())
+      .then(d => { setMapData(d); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!mapData || !mapData.explorations || mapData.explorations.length === 0) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    d3.select(svgRef.current).selectAll("*").remove();
+
+    const svg = d3.select(svgRef.current)
+      .attr("width", width)
+      .attr("height", height);
+
+    const g = svg.append("g");
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.2, 3])
+      .on("zoom", (event) => g.attr("transform", event.transform));
+    svg.call(zoom);
+
+    const initialTransform = d3.zoomIdentity.translate(width / 2, height / 2).scale(0.9);
+    svg.call(zoom.transform, initialTransform);
+
+    const explorationNodes = mapData.explorations.map(e => ({ ...e }));
+    const links = (mapData.links || []).map(l => ({
+      source: l.source_exploration,
+      target: l.target_exploration,
+      sharedNodes: l.shared_nodes,
+    }));
+
+    const simulation = d3.forceSimulation(explorationNodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(200))
+      .force("charge", d3.forceManyBody().strength(-500))
+      .force("center", d3.forceCenter(0, 0))
+      .force("collision", d3.forceCollide().radius(70));
+
+    // Draw links
+    const link = g.append("g")
+      .selectAll("line")
+      .data(links)
+      .join("line")
+      .attr("stroke", "#88C0D044")
+      .attr("stroke-width", 2);
+
+    const linkLabel = g.append("g")
+      .selectAll("text")
+      .data(links)
+      .join("text")
+      .attr("font-size", "9px")
+      .attr("fill", "#88C0D077")
+      .attr("text-anchor", "middle")
+      .attr("font-family", "'JetBrains Mono', monospace")
+      .text(d => d.sharedNodes?.map(n => n.label).join(", ") || "");
+
+    // Draw exploration nodes
+    const node = g.append("g")
+      .selectAll("g")
+      .data(explorationNodes)
+      .join("g")
+      .style("cursor", "pointer")
+      .call(d3.drag()
+        .on("start", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on("end", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null; d.fy = null;
+        })
+      )
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        onNavigateToExploration(d.id);
+      });
+
+    node.append("circle")
+      .attr("r", 28)
+      .attr("fill", "#1a1d23")
+      .attr("stroke", "#88C0D0")
+      .attr("stroke-width", 1.5);
+
+    node.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", "0.35em")
+      .attr("fill", "#D8DEE9")
+      .attr("font-size", "11px")
+      .attr("font-family", "'Space Grotesk', sans-serif")
+      .attr("font-weight", "600")
+      .text(d => "◈");
+
+    node.append("text")
+      .attr("dy", 46)
+      .attr("text-anchor", "middle")
+      .attr("fill", "#A3AEC2")
+      .attr("font-size", "10px")
+      .attr("font-family", "'Space Grotesk', sans-serif")
+      .text(d => d.claim.length > 28 ? d.claim.slice(0, 26) + "…" : d.claim);
+
+    simulation.on("tick", () => {
+      link
+        .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+      linkLabel
+        .attr("x", d => (d.source.x + d.target.x) / 2)
+        .attr("y", d => (d.source.y + d.target.y) / 2 - 6);
+      node.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    return () => simulation.stop();
+  }, [mapData, onNavigateToExploration]);
+
+  if (loading) {
+    return (
+      <div style={{
+        position: "absolute", inset: 0, display: "flex",
+        alignItems: "center", justifyContent: "center",
+        flexDirection: "column", gap: 16, background: "#0d1017", zIndex: 10,
+      }}>
+        <div style={{
+          width: 40, height: 40,
+          border: "2px solid #2E3440", borderTopColor: "#88C0D0",
+          borderRadius: "50%", animation: "spin 1s linear infinite"
+        }} />
+        <div style={{ color: "#4C566A", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+          Loading map...
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        position: "absolute", inset: 0, display: "flex",
+        alignItems: "center", justifyContent: "center",
+        background: "#0d1017", zIndex: 10,
+        color: "#BF616A", fontSize: 13, fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        Failed to load map: {error}
+      </div>
+    );
+  }
+
+  if (!mapData || !mapData.explorations || mapData.explorations.length === 0) {
+    return (
+      <div style={{
+        position: "absolute", inset: 0, display: "flex",
+        flexDirection: "column", alignItems: "center", justifyContent: "center",
+        background: "#0d1017", zIndex: 10,
+      }}>
+        <div style={{ fontSize: 48, opacity: 0.1, marginBottom: 16 }}>⬡</div>
+        <div style={{ color: "#4C566A", fontSize: 14, fontFamily: "'Space Grotesk', sans-serif", textAlign: "center", maxWidth: 320 }}>
+          No explorations yet. Trace some lineages and the map will show how ideas connect across your explorations.
+        </div>
+      </div>
+    );
+  }
+
+  if (!mapData.links || mapData.links.length === 0) {
+    return (
+      <div style={{
+        position: "absolute", inset: 0, display: "flex",
+        flexDirection: "column", alignItems: "center", justifyContent: "center",
+        background: "#0d1017", zIndex: 10,
+      }}>
+        <div style={{ fontSize: 48, opacity: 0.1, marginBottom: 16 }}>⬡</div>
+        <div style={{ color: "#4C566A", fontSize: 14, fontFamily: "'Space Grotesk', sans-serif", textAlign: "center", maxWidth: 360 }}>
+          {mapData.explorations.length} exploration{mapData.explorations.length !== 1 ? "s" : ""} so far — no shared ancestors yet. Keep tracing lineages and connections will emerge.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: "absolute", inset: 0, background: "#0d1017", zIndex: 10 }}>
+      <svg ref={svgRef} style={{ width: "100%", height: "100%" }} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// HistoryPanel
+// ─────────────────────────────────────────────────────────
 function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick }) {
   return (
     <>
-      {/* Backdrop on mobile */}
       {isMobile && (
         <div
           onClick={onClose}
           style={{
             position: "absolute", inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            zIndex: 19,
+            background: "rgba(0,0,0,0.6)", zIndex: 19,
           }}
         />
       )}
       <div style={{
-        position: "absolute",
-        top: 0, bottom: 0,
-        left: 0,
+        position: "absolute", top: 0, bottom: 0, left: 0,
         width: isMobile ? "min(320px, 85vw)" : 280,
         maxHeight: "100%",
         background: "#13161cFD",
-        border: "none",
         borderRight: "1px solid #2E3440",
-        zIndex: 20,
-        overflowY: "auto",
+        zIndex: 20, overflowY: "auto",
         boxShadow: "4px 0 24px rgba(0,0,0,0.5)",
         backdropFilter: "blur(12px)",
         display: "flex", flexDirection: "column",
@@ -643,13 +888,12 @@ function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick 
         }}>
           <span style={{
             fontSize: 11, color: "#88C0D0", textTransform: "uppercase",
-            letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace",
-            fontWeight: 500
+            letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500
           }}>Explorations</span>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{
-              fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
-            }}>{history.length} cached</span>
+            <span style={{ fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace" }}>
+              {history.length} saved
+            </span>
             {isMobile && (
               <button onClick={onClose} style={{
                 background: "none", border: "none", color: "#616E88",
@@ -663,8 +907,8 @@ function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick 
             const isActive = h.claim === activeClaim;
             return (
               <button
-                key={h.claim + "-" + h.timestamp}
-                onClick={() => { onHistoryClick(h.claim); if (isMobile) onClose(); }}
+                key={(h.id || h.claim) + "-" + (h.timestamp || "")}
+                onClick={() => { onHistoryClick(h); if (isMobile) onClose(); }}
                 style={{
                   display: "flex", width: "100%", textAlign: "left",
                   background: isActive ? "#88C0D00F" : "transparent",
@@ -683,18 +927,27 @@ function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick 
                   if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#7A8394"; }
                 }}
               >
-                <span style={{
-                  color: isActive ? "#88C0D0" : "#3B4252",
-                  fontSize: 10, marginTop: 2, flexShrink: 0
-                }}>
+                <span style={{ color: isActive ? "#88C0D0" : "#3B4252", fontSize: 10, marginTop: 2, flexShrink: 0 }}>
                   {isActive ? "◈" : "○"}
                 </span>
-                <span style={{
-                  overflow: "hidden", display: "-webkit-box",
-                  WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
-                }}>
-                  {h.claim}
-                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    overflow: "hidden", display: "-webkit-box",
+                    WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
+                  }}>
+                    {h.claim}
+                  </div>
+                  {h.connections_count > 0 && (
+                    <div style={{
+                      marginTop: 4, fontSize: 10, color: "#88C0D077",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}>
+                      <span>⬡</span>
+                      {h.connections_count} connection{h.connections_count !== 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -704,6 +957,9 @@ function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick 
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// Example claims
+// ─────────────────────────────────────────────────────────
 const EXAMPLE_CLAIMS = [
   "Free will is an illusion",
   "Language shapes thought",
@@ -715,6 +971,9 @@ const EXAMPLE_CLAIMS = [
   "Knowledge is justified true belief",
 ];
 
+// ─────────────────────────────────────────────────────────
+// Main Prism component
+// ─────────────────────────────────────────────────────────
 export default function Prism() {
   const isMobile = useIsMobile();
 
@@ -726,19 +985,84 @@ export default function Prism() {
   const [activeClaim, setActiveClaim] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [error, setError] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState([]);      // merged in-memory + DB
   const [showHistory, setShowHistory] = useState(false);
-  const [viewMode, setViewMode] = useState("graph");
+  const [viewMode, setViewMode] = useState("graph"); // "graph" | "read" | "map"
+  const [connections, setConnections] = useState([]); // cross-exploration connections for current
+  const [activeExplorationId, setActiveExplorationId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const cacheRef = useRef(new Map());
+  const cacheRef = useRef(new Map()); // claim -> { graphData, deepSynthesis, id, connections }
 
+  // ── Load DB history on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/explorations')
+      .then(r => r.json())
+      .then(({ explorations }) => {
+        if (!explorations) return;
+        setHistory(prev => {
+          const inMemoryClaims = new Set(prev.map(h => h.claim));
+          const dbOnly = explorations.filter(e => !inMemoryClaims.has(e.claim));
+          return [...prev, ...dbOnly.map(e => ({
+            id: e.id,
+            claim: e.claim,
+            timestamp: new Date(e.created_at).getTime(),
+            connections_count: e.connections_count || 0,
+            fromDb: true,
+          }))];
+        });
+      })
+      .catch(() => { /* Supabase not configured — silent */ });
+  }, []);
+
+  // ── Save exploration after both passes complete ───────────────────────────
+  const saveExploration = useCallback(async (claimText, gData, blindSpot) => {
+    setSaving(true);
+    try {
+      const resp = await fetch('/api/explorations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claim: claimText,
+          synthesis: gData.synthesis,
+          blind_spot: blindSpot,
+          graph_data: gData,
+        }),
+      });
+      if (!resp.ok) return;
+      const { exploration, connections: newConns } = await resp.json();
+
+      setActiveExplorationId(exploration.id);
+      setConnections(newConns || []);
+
+      // Update cache with DB id + connections
+      const cached = cacheRef.current.get(claimText);
+      if (cached) {
+        cached.id = exploration.id;
+        cached.connections = newConns || [];
+        cacheRef.current.set(claimText, cached);
+      }
+
+      // Update history item with DB id and connection count
+      setHistory(prev => prev.map(h =>
+        h.claim === claimText
+          ? { ...h, id: exploration.id, connections_count: newConns?.length || 0 }
+          : h
+      ));
+    } catch {
+      // Supabase not configured — silent
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // ── Deep synthesis ────────────────────────────────────────────────────────
   const runDeepSynthesis = useCallback(async (claimText, graphResult) => {
     setDeepLoading(true);
     try {
       const nodesSummary = graphResult.nodes.map(n =>
         `- ${n.label} (${n.thinker}, ${n.era}, ${n.period}): ${n.keyInsight}`
       ).join("\n");
-
       const edgesSummary = graphResult.edges.map(e =>
         `${e.source} → ${e.target} (${e.relationship})`
       ).join("\n");
@@ -759,13 +1083,17 @@ export default function Prism() {
       }
 
       setDeepSynthesis(text);
+
+      // Auto-save after both passes
+      await saveExploration(claimText, graphResult, text);
     } catch (err) {
       console.error("Deep synthesis error:", err);
     } finally {
       setDeepLoading(false);
     }
-  }, []);
+  }, [saveExploration]);
 
+  // ── Load from in-memory cache ─────────────────────────────────────────────
   const loadFromCache = useCallback((cachedClaim) => {
     const cached = cacheRef.current.get(cachedClaim);
     if (cached) {
@@ -773,6 +1101,8 @@ export default function Prism() {
       setDeepSynthesis(cached.deepSynthesis || null);
       setDeepLoading(false);
       setActiveClaim(cachedClaim);
+      setActiveExplorationId(cached.id || null);
+      setConnections(cached.connections || []);
       setSelectedNode(null);
       setError(null);
       return true;
@@ -780,6 +1110,52 @@ export default function Prism() {
     return false;
   }, []);
 
+  // ── Load exploration from DB ──────────────────────────────────────────────
+  const loadExplorationById = useCallback(async (id, claimText) => {
+    try {
+      const resp = await fetch(`/api/explorations/${id}`);
+      if (!resp.ok) return false;
+      const { exploration, connections: conns } = await resp.json();
+
+      const gData = exploration.graph_data;
+      if (!gData) return false;
+
+      cacheRef.current.set(claimText, {
+        graphData: gData,
+        deepSynthesis: exploration.blind_spot || null,
+        id: exploration.id,
+        connections: conns || [],
+      });
+
+      setGraphData(gData);
+      setDeepSynthesis(exploration.blind_spot || null);
+      setDeepLoading(false);
+      setActiveClaim(claimText);
+      setActiveExplorationId(exploration.id);
+      setConnections(conns || []);
+      setSelectedNode(null);
+      setError(null);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // ── Navigate to an exploration by DB id ──────────────────────────────────
+  const navigateToExploration = useCallback(async (id) => {
+    // Check if it's already in history/cache
+    const histItem = history.find(h => h.id === id);
+    if (histItem) {
+      if (loadFromCache(histItem.claim)) {
+        setViewMode("graph");
+        return;
+      }
+      await loadExplorationById(id, histItem.claim);
+      setViewMode("graph");
+    }
+  }, [history, loadFromCache, loadExplorationById]);
+
+  // ── Trace lineage ─────────────────────────────────────────────────────────
   const traceLineage = useCallback(async (inputClaim) => {
     const c = inputClaim || claim;
     if (!c.trim()) return;
@@ -792,7 +1168,7 @@ export default function Prism() {
       setHistory(prev => {
         const filtered = prev.filter(h => h.claim !== c);
         const existing = prev.find(h => h.claim === c);
-        return [existing || { claim: c, timestamp: Date.now() }, ...filtered].slice(0, 20);
+        return [existing || { claim: c, timestamp: Date.now() }, ...filtered].slice(0, 50);
       });
       setClaim("");
       return;
@@ -805,6 +1181,8 @@ export default function Prism() {
     setDeepSynthesis(null);
     setDeepLoading(false);
     setActiveClaim(c);
+    setConnections([]);
+    setActiveExplorationId(null);
 
     try {
       const data = await callAPI(LINEAGE_SYSTEM_PROMPT, [
@@ -816,17 +1194,16 @@ export default function Prism() {
       const parsed = JSON.parse(clean);
       if (!parsed.nodes || !parsed.edges) throw new Error("Invalid response structure");
 
-      cacheRef.current.set(c, { graphData: parsed, deepSynthesis: null });
+      cacheRef.current.set(c, { graphData: parsed, deepSynthesis: null, id: null, connections: [] });
 
       setGraphData(parsed);
       setHistory(prev => {
         const filtered = prev.filter(h => h.claim !== c);
-        return [{ claim: c, timestamp: Date.now() }, ...filtered].slice(0, 20);
+        return [{ claim: c, timestamp: Date.now(), connections_count: 0 }, ...filtered].slice(0, 50);
       });
       setClaim("");
 
       runDeepSynthesis(c, parsed);
-
     } catch (err) {
       console.error(err);
       setError(err.message || "Something went wrong. Try again.");
@@ -835,9 +1212,30 @@ export default function Prism() {
     }
   }, [claim, loadFromCache, runDeepSynthesis]);
 
-  const handleHistoryClick = useCallback((historyClaim) => {
-    loadFromCache(historyClaim);
-  }, [loadFromCache]);
+  // ── History click ─────────────────────────────────────────────────────────
+  const handleHistoryClick = useCallback(async (histItem) => {
+    const { claim: c, id, fromDb } = histItem;
+
+    // Try in-memory cache first
+    if (loadFromCache(c)) {
+      setViewMode("graph");
+      return;
+    }
+
+    // If we have a DB id, fetch from API
+    if (id) {
+      setActiveClaim(c);
+      setViewMode("graph");
+      setGraphData(null);
+      setDeepSynthesis(null);
+      setConnections([]);
+      await loadExplorationById(id, c);
+      return;
+    }
+
+    // Otherwise re-trace
+    traceLineage(c);
+  }, [loadFromCache, loadExplorationById, traceLineage]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -846,10 +1244,15 @@ export default function Prism() {
     }
   };
 
-  // History panel only overlays graph on desktop; on mobile it's a drawer
   const historyPanelOpen = showHistory && history.length > 0 && graphData;
-  // On desktop, shift era legend right when history panel is open
   const eraLegendLeft = (!isMobile && historyPanelOpen) ? 300 : 20;
+
+  // Shared node labels for graph highlighting
+  const sharedNodeLabels = new Set(
+    connections.flatMap(c => (c.sharedNodes || []).map(n => n.label?.toLowerCase()))
+  );
+
+  const VIEW_MODES = graphData ? ["graph", "read", "map"] : [];
 
   return (
     <div style={{
@@ -866,7 +1269,7 @@ export default function Prism() {
         pointerEvents: "none"
       }} />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         padding: isMobile ? "12px 16px" : "14px 24px",
         borderBottom: "1px solid #1a1d23",
@@ -892,38 +1295,45 @@ export default function Prism() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {/* Graph / Read toggle */}
-          {graphData && (
+          {/* View mode toggle */}
+          {VIEW_MODES.length > 0 && (
             <div style={{
-              display: "flex",
-              background: "#1a1d23",
-              border: "1px solid #2E3440",
-              borderRadius: 8,
-              padding: 3,
-              gap: 2,
+              display: "flex", background: "#1a1d23",
+              border: "1px solid #2E3440", borderRadius: 8, padding: 3, gap: 2,
             }}>
-              {["graph", "read"].map(mode => (
+              {VIEW_MODES.map(mode => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
                   style={{
                     background: viewMode === mode ? "#2E3440" : "transparent",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: isMobile ? "5px 10px" : "5px 13px",
+                    border: "none", borderRadius: 6,
+                    padding: isMobile ? "5px 9px" : "5px 13px",
                     color: viewMode === mode ? "#ECEFF4" : "#4C566A",
-                    fontSize: 11,
-                    fontFamily: "'JetBrains Mono', monospace",
-                    cursor: "pointer",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    transition: "all 0.2s",
+                    fontSize: 11, fontFamily: "'JetBrains Mono', monospace",
+                    cursor: "pointer", textTransform: "uppercase",
+                    letterSpacing: "0.08em", transition: "all 0.2s",
                   }}
                 >
-                  {mode === "graph" ? "Graph" : "Read"}
+                  {mode === "graph" ? "Graph" : mode === "read" ? "Read" : "Map"}
                 </button>
               ))}
             </div>
+          )}
+
+          {/* Saving indicator */}
+          {saving && (
+            <span style={{
+              fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace",
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              <span style={{
+                display: "inline-block", width: 8, height: 8,
+                border: "1px solid #2E3440", borderTopColor: "#88C0D0",
+                borderRadius: "50%", animation: "spin 0.8s linear infinite",
+              }} />
+              {!isMobile && "saving"}
+            </span>
           )}
 
           {/* History toggle */}
@@ -949,9 +1359,10 @@ export default function Prism() {
         </div>
       </div>
 
-      {/* Main */}
+      {/* ── Main ── */}
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
 
+        {/* Empty state */}
         {!graphData && !loading && (
           <div style={{
             position: "absolute", inset: 0, display: "flex",
@@ -986,6 +1397,7 @@ export default function Prism() {
           </div>
         )}
 
+        {/* Loading spinner */}
         {loading && (
           <div style={{
             position: "absolute", inset: 0, display: "flex",
@@ -1011,6 +1423,7 @@ export default function Prism() {
           </div>
         )}
 
+        {/* Error */}
         {error && (
           <div style={{
             position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)",
@@ -1022,10 +1435,14 @@ export default function Prism() {
           </div>
         )}
 
-        {/* Graph mode */}
+        {/* ── Graph mode ── */}
         {graphData && viewMode === "graph" && (
           <>
-            <GraphVisualization data={graphData} onNodeClick={setSelectedNode} />
+            <GraphVisualization
+              data={graphData}
+              onNodeClick={setSelectedNode}
+              sharedNodeLabels={sharedNodeLabels}
+            />
 
             <NodeDetail
               node={selectedNode}
@@ -1034,12 +1451,10 @@ export default function Prism() {
               isMobile={isMobile}
             />
 
-            {/* Era legend — desktop only, above synthesis bar */}
+            {/* Era legend — desktop only */}
             {!isMobile && (
               <div style={{
-                position: "absolute",
-                bottom: 52,
-                left: eraLegendLeft,
+                position: "absolute", bottom: 52, left: eraLegendLeft,
                 display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5, maxWidth: 300,
                 transition: "left 0.3s ease"
               }}>
@@ -1062,7 +1477,7 @@ export default function Prism() {
               onReadClick={() => setViewMode("read")}
             />
 
-            {/* History panel — drawer on mobile, side panel on desktop */}
+            {/* History drawer */}
             {historyPanelOpen && (
               <HistoryPanel
                 history={history}
@@ -1075,7 +1490,7 @@ export default function Prism() {
           </>
         )}
 
-        {/* Read mode */}
+        {/* ── Read mode ── */}
         {graphData && viewMode === "read" && (
           <ReadView
             claim={activeClaim}
@@ -1083,11 +1498,19 @@ export default function Prism() {
             deepSynthesis={deepSynthesis}
             deepLoading={deepLoading}
             nodes={graphData?.nodes}
+            connections={connections}
+            isMobile={isMobile}
+            onNavigateToExploration={(id) => { navigateToExploration(id); }}
           />
+        )}
+
+        {/* ── Map mode ── */}
+        {graphData && viewMode === "map" && (
+          <MapView onNavigateToExploration={navigateToExploration} />
         )}
       </div>
 
-      {/* Input */}
+      {/* ── Input ── */}
       <div style={{
         padding: isMobile ? "10px 12px 12px" : "12px 24px 16px",
         borderTop: "1px solid #1a1d23",
