@@ -19,6 +19,16 @@ function getEraColor(era) {
   return "#88C0D0";
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return isMobile;
+}
+
 const LINEAGE_SYSTEM_PROMPT = `You are Prism, a knowledge lineage engine. Given a claim or idea, trace its intellectual lineage through history.
 
 Return ONLY valid JSON (no markdown, no backticks, no preamble) with this exact structure:
@@ -225,15 +235,33 @@ function GraphVisualization({ data, onNodeClick }) {
   );
 }
 
-function NodeDetail({ node, onClose, onExplore }) {
+function NodeDetail({ node, onClose, onExplore, isMobile }) {
   if (!node) return null;
+
+  const mobileStyle = {
+    position: "absolute",
+    left: 0, right: 0, bottom: 44,
+    top: "auto",
+    width: "auto",
+    maxHeight: "55vh",
+    borderRadius: "12px 12px 0 0",
+    borderBottom: "none",
+  };
+
+  const desktopStyle = {
+    position: "absolute",
+    right: 20, top: 20, bottom: 52,
+    width: 340,
+    borderRadius: 12,
+  };
+
   return (
     <div style={{
-      position: "absolute", right: 20, top: 20, bottom: 52,
-      width: 340, background: "#1a1d23", border: "1px solid #2E3440",
-      borderRadius: 12, padding: 24, overflowY: "auto",
+      background: "#1a1d23", border: "1px solid #2E3440",
+      padding: 24, overflowY: "auto",
       boxShadow: "0 8px 32px rgba(0,0,0,0.4)", zIndex: 10,
       fontFamily: "'Space Grotesk', sans-serif",
+      ...(isMobile ? mobileStyle : desktopStyle),
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 16 }}>
         <div>
@@ -354,7 +382,54 @@ function SynthesisBar({ synthesis, deepSynthesis, deepLoading, onReadClick }) {
   );
 }
 
-function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes }) {
+function NodeCards({ nodes }) {
+  if (!nodes || nodes.length === 0) return null;
+  return (
+    <div>
+      <div style={{
+        fontSize: 10, color: "#4C566A",
+        fontFamily: "'JetBrains Mono', monospace",
+        textTransform: "uppercase", letterSpacing: "0.1em",
+        marginBottom: 12,
+      }}>
+        {nodes.length} nodes
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {nodes.map(node => (
+          <div key={node.id} style={{
+            padding: "10px 14px",
+            background: "#1a1d23",
+            borderRadius: 8,
+            borderLeft: `3px solid ${getEraColor(node.era)}`,
+            display: "flex", flexDirection: "column", gap: 3,
+          }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "#D8DEE9", fontSize: 13, fontWeight: 600 }}>
+                {node.label}
+              </span>
+              {node.isRoot && (
+                <span style={{
+                  fontSize: 9, color: "#88C0D0",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  textTransform: "uppercase", letterSpacing: "0.1em",
+                }}>root</span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ color: "#7A8394", fontSize: 12 }}>{node.thinker}</span>
+              <span style={{
+                color: "#4C566A", fontSize: 10,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}>{node.period}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes, isMobile }) {
   const [activeTab, setActiveTab] = useState("lineage");
 
   useEffect(() => {
@@ -372,17 +447,134 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes }) {
 
   const activeContent = activeTab === "deep" && deepSynthesis ? deepSynthesis : synthesis;
 
+  const tabBar = (
+    <div style={{
+      display: "flex",
+      borderBottom: "1px solid #2E3440",
+      marginBottom: 24,
+    }}>
+      {tabs.map(tab => {
+        const isActive = activeTab === tab.id;
+        const isAvailable = tab.id === "lineage" || deepSynthesis || tab.loading;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => {
+              if (tab.id === "lineage" || deepSynthesis) setActiveTab(tab.id);
+            }}
+            style={{
+              background: "none", border: "none",
+              padding: "10px 16px 8px",
+              color: isActive ? "#88C0D0" : "#4C566A",
+              fontSize: 11, fontWeight: isActive ? 600 : 400,
+              fontFamily: "'JetBrains Mono', monospace",
+              textTransform: "uppercase", letterSpacing: "0.08em",
+              cursor: isAvailable ? "pointer" : "default",
+              borderBottom: isActive ? "2px solid #88C0D0" : "2px solid transparent",
+              marginBottom: -1,
+              transition: "all 0.2s",
+              display: "flex", alignItems: "center", gap: 6,
+              opacity: isAvailable ? 1 : 0.4,
+            }}
+          >
+            {tab.id === "lineage" && <span style={{ fontSize: 10 }}>◈</span>}
+            {tab.id === "deep" && !tab.loading && deepSynthesis && <span style={{ fontSize: 10 }}>⬡</span>}
+            {tab.label}
+            {tab.loading && (
+              <span style={{
+                display: "inline-block", width: 10, height: 10,
+                border: "1.5px solid #2E3440", borderTopColor: "#88C0D0",
+                borderRadius: "50%", animation: "spin 0.8s linear infinite"
+              }} />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const synthesisContent = (
+    <>
+      {activeTab === "deep" && deepLoading && !deepSynthesis && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          color: "#616E88", fontSize: 14, fontStyle: "italic",
+          fontFamily: "'Space Grotesk', sans-serif",
+          padding: "8px 0", marginBottom: 32,
+        }}>
+          <span style={{
+            display: "inline-block", width: 14, height: 14,
+            border: "2px solid #2E3440", borderTopColor: "#88C0D0",
+            borderRadius: "50%", animation: "spin 0.8s linear infinite",
+            flexShrink: 0
+          }} />
+          Searching for what both sides are missing...
+        </div>
+      )}
+
+      {(activeTab === "lineage" || deepSynthesis) && activeContent && (
+        <div style={{
+          color: "#D8DEE9",
+          fontSize: 19,
+          lineHeight: 1.8,
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontWeight: 400,
+          letterSpacing: "0.01em",
+        }}>
+          {activeContent}
+        </div>
+      )}
+    </>
+  );
+
+  // Mobile: single column, scrollable
+  if (isMobile) {
+    return (
+      <div style={{
+        position: "absolute", inset: 0,
+        overflowY: "auto",
+        padding: "28px 20px 40px",
+        fontFamily: "'Space Grotesk', sans-serif",
+        zIndex: 10,
+        background: "#0d1017",
+      }}>
+        <h2 style={{
+          fontFamily: "'Instrument Serif', serif",
+          fontSize: 22,
+          fontWeight: 400,
+          color: "#ECEFF4",
+          marginTop: 0,
+          marginBottom: 24,
+          lineHeight: 1.3,
+          letterSpacing: "-0.01em",
+        }}>
+          {claim}
+        </h2>
+        {tabBar}
+        <div style={{ marginBottom: 36 }}>{synthesisContent}</div>
+        <NodeCards nodes={nodes} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Desktop: split pane
   return (
     <div style={{
       position: "absolute", inset: 0,
-      overflowY: "auto",
-      padding: "40px 24px 60px",
+      display: "flex",
       fontFamily: "'Space Grotesk', sans-serif",
       zIndex: 10,
       background: "#0d1017",
     }}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        {/* Claim header */}
+      {/* Left pane — synthesis */}
+      <div style={{
+        flex: "0 0 58%",
+        borderRight: "1px solid #1a1d23",
+        overflowY: "auto",
+        padding: "40px 40px 60px",
+        display: "flex", flexDirection: "column",
+      }}>
         <h2 style={{
           fontFamily: "'Instrument Serif', serif",
           fontSize: 28,
@@ -395,132 +587,120 @@ function ReadView({ claim, synthesis, deepSynthesis, deepLoading, nodes }) {
         }}>
           {claim}
         </h2>
+        {tabBar}
+        {synthesisContent}
+      </div>
 
-        {/* Tabs */}
+      {/* Right pane — node cards */}
+      <div style={{
+        flex: "0 0 42%",
+        overflowY: "auto",
+        padding: "40px 28px 60px",
+        background: "#0b0e14",
+      }}>
+        <NodeCards nodes={nodes} />
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// History panel — side panel on desktop, full-screen drawer on mobile
+function HistoryPanel({ history, activeClaim, isMobile, onClose, onHistoryClick }) {
+  return (
+    <>
+      {/* Backdrop on mobile */}
+      {isMobile && (
+        <div
+          onClick={onClose}
+          style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 19,
+          }}
+        />
+      )}
+      <div style={{
+        position: "absolute",
+        top: 0, bottom: 0,
+        left: 0,
+        width: isMobile ? "min(320px, 85vw)" : 280,
+        maxHeight: "100%",
+        background: "#13161cFD",
+        border: "none",
+        borderRight: "1px solid #2E3440",
+        zIndex: 20,
+        overflowY: "auto",
+        boxShadow: "4px 0 24px rgba(0,0,0,0.5)",
+        backdropFilter: "blur(12px)",
+        display: "flex", flexDirection: "column",
+      }}>
         <div style={{
-          display: "flex",
-          borderBottom: "1px solid #2E3440",
-          marginBottom: 28,
+          padding: "14px 18px 10px", borderBottom: "1px solid #2E344088",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexShrink: 0,
         }}>
-          {tabs.map(tab => {
-            const isActive = activeTab === tab.id;
-            const isAvailable = tab.id === "lineage" || deepSynthesis || tab.loading;
+          <span style={{
+            fontSize: 11, color: "#88C0D0", textTransform: "uppercase",
+            letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace",
+            fontWeight: 500
+          }}>Explorations</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{
+              fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
+            }}>{history.length} cached</span>
+            {isMobile && (
+              <button onClick={onClose} style={{
+                background: "none", border: "none", color: "#616E88",
+                fontSize: 18, cursor: "pointer", padding: "2px 4px", lineHeight: 1
+              }}>✕</button>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: "6px 8px 8px", overflowY: "auto", flex: 1 }}>
+          {history.map((h) => {
+            const isActive = h.claim === activeClaim;
             return (
               <button
-                key={tab.id}
-                onClick={() => {
-                  if (tab.id === "lineage" || deepSynthesis) setActiveTab(tab.id);
-                }}
+                key={h.claim + "-" + h.timestamp}
+                onClick={() => { onHistoryClick(h.claim); if (isMobile) onClose(); }}
                 style={{
-                  background: "none", border: "none",
-                  padding: "10px 16px 8px",
-                  color: isActive ? "#88C0D0" : "#4C566A",
-                  fontSize: 11, fontWeight: isActive ? 600 : 400,
-                  fontFamily: "'JetBrains Mono', monospace",
-                  textTransform: "uppercase", letterSpacing: "0.08em",
-                  cursor: isAvailable ? "pointer" : "default",
-                  borderBottom: isActive ? "2px solid #88C0D0" : "2px solid transparent",
-                  marginBottom: -1,
-                  transition: "all 0.2s",
-                  display: "flex", alignItems: "center", gap: 6,
-                  opacity: isAvailable ? 1 : 0.4,
+                  display: "flex", width: "100%", textAlign: "left",
+                  background: isActive ? "#88C0D00F" : "transparent",
+                  border: isActive ? "1px solid #88C0D025" : "1px solid transparent",
+                  borderRadius: 8, padding: "10px 12px", marginBottom: 2,
+                  color: isActive ? "#88C0D0" : "#7A8394",
+                  fontSize: 12, cursor: "pointer",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  transition: "all 0.15s", alignItems: "flex-start", gap: 10,
+                  lineHeight: 1.4
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) { e.currentTarget.style.background = "#1a1d2388"; e.currentTarget.style.color = "#C8CED8"; }
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#7A8394"; }
                 }}
               >
-                {tab.id === "lineage" && <span style={{ fontSize: 10 }}>◈</span>}
-                {tab.id === "deep" && !tab.loading && deepSynthesis && <span style={{ fontSize: 10 }}>⬡</span>}
-                {tab.label}
-                {tab.loading && (
-                  <span style={{
-                    display: "inline-block", width: 10, height: 10,
-                    border: "1.5px solid #2E3440", borderTopColor: "#88C0D0",
-                    borderRadius: "50%", animation: "spin 0.8s linear infinite"
-                  }} />
-                )}
+                <span style={{
+                  color: isActive ? "#88C0D0" : "#3B4252",
+                  fontSize: 10, marginTop: 2, flexShrink: 0
+                }}>
+                  {isActive ? "◈" : "○"}
+                </span>
+                <span style={{
+                  overflow: "hidden", display: "-webkit-box",
+                  WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
+                }}>
+                  {h.claim}
+                </span>
               </button>
             );
           })}
         </div>
-
-        {/* Loading state for blind spot */}
-        {activeTab === "deep" && deepLoading && !deepSynthesis && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12,
-            color: "#616E88", fontSize: 14, fontStyle: "italic",
-            fontFamily: "'Space Grotesk', sans-serif",
-            padding: "8px 0", marginBottom: 40,
-          }}>
-            <span style={{
-              display: "inline-block", width: 14, height: 14,
-              border: "2px solid #2E3440", borderTopColor: "#88C0D0",
-              borderRadius: "50%", animation: "spin 0.8s linear infinite",
-              flexShrink: 0
-            }} />
-            Searching for what both sides are missing...
-          </div>
-        )}
-
-        {/* Synthesis content */}
-        {(activeTab === "lineage" || deepSynthesis) && activeContent && (
-          <div style={{
-            color: "#D8DEE9",
-            fontSize: 19,
-            lineHeight: 1.8,
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontWeight: 400,
-            marginBottom: 52,
-            letterSpacing: "0.01em",
-          }}>
-            {activeContent}
-          </div>
-        )}
-
-        {/* Node cards */}
-        {nodes && nodes.length > 0 && (
-          <div>
-            <div style={{
-              fontSize: 10, color: "#4C566A",
-              fontFamily: "'JetBrains Mono', monospace",
-              textTransform: "uppercase", letterSpacing: "0.1em",
-              marginBottom: 14,
-            }}>
-              {nodes.length} nodes in lineage
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {nodes.map(node => (
-                <div key={node.id} style={{
-                  padding: "12px 16px",
-                  background: "#1a1d23",
-                  borderRadius: 8,
-                  borderLeft: `3px solid ${getEraColor(node.era)}`,
-                  display: "flex", flexDirection: "column", gap: 4,
-                }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                    <span style={{ color: "#D8DEE9", fontSize: 14, fontWeight: 600 }}>
-                      {node.label}
-                    </span>
-                    {node.isRoot && (
-                      <span style={{
-                        fontSize: 9, color: "#88C0D0",
-                        fontFamily: "'JetBrains Mono', monospace",
-                        textTransform: "uppercase", letterSpacing: "0.1em",
-                      }}>root</span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <span style={{ color: "#7A8394", fontSize: 12 }}>{node.thinker}</span>
-                    <span style={{
-                      color: "#4C566A", fontSize: 10,
-                      fontFamily: "'JetBrains Mono', monospace",
-                    }}>{node.period}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </>
   );
 }
 
@@ -536,6 +716,8 @@ const EXAMPLE_CLAIMS = [
 ];
 
 export default function Prism() {
+  const isMobile = useIsMobile();
+
   const [claim, setClaim] = useState("");
   const [loading, setLoading] = useState(false);
   const [deepLoading, setDeepLoading] = useState(false);
@@ -545,7 +727,7 @@ export default function Prism() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [viewMode, setViewMode] = useState("graph");
 
   const cacheRef = useRef(new Map());
@@ -603,6 +785,7 @@ export default function Prism() {
     if (!c.trim()) return;
 
     setViewMode("graph");
+    setShowHistory(false);
 
     if (cacheRef.current.has(c)) {
       loadFromCache(c);
@@ -663,7 +846,10 @@ export default function Prism() {
     }
   };
 
-  const historyVisible = showHistory && history.length > 0 && graphData;
+  // History panel only overlays graph on desktop; on mobile it's a drawer
+  const historyPanelOpen = showHistory && history.length > 0 && graphData;
+  // On desktop, shift era legend right when history panel is open
+  const eraLegendLeft = (!isMobile && historyPanelOpen) ? 300 : 20;
 
   return (
     <div style={{
@@ -682,26 +868,30 @@ export default function Prism() {
 
       {/* Header */}
       <div style={{
-        padding: "14px 24px", borderBottom: "1px solid #1a1d23",
+        padding: isMobile ? "12px 16px" : "14px 24px",
+        borderBottom: "1px solid #1a1d23",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         position: "relative", zIndex: 5, flexShrink: 0,
-        background: "#0d1017ee", backdropFilter: "blur(12px)"
+        background: "#0d1017ee", backdropFilter: "blur(12px)",
+        gap: 8,
       }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
           <h1 style={{
-            margin: 0, fontSize: 22, fontWeight: 700,
+            margin: 0, fontSize: isMobile ? 18 : 22, fontWeight: 700,
             fontFamily: "'Instrument Serif', serif", color: "#ECEFF4",
-            letterSpacing: "-0.02em"
+            letterSpacing: "-0.02em", whiteSpace: "nowrap",
           }}>
             <span style={{ color: "#88C0D0" }}>◈</span> PRISM
           </h1>
-          <span style={{
-            fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace",
-            textTransform: "uppercase", letterSpacing: "0.15em"
-          }}>Knowledge Lineage Engine</span>
+          {!isMobile && (
+            <span style={{
+              fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace",
+              textTransform: "uppercase", letterSpacing: "0.15em"
+            }}>Knowledge Lineage Engine</span>
+          )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* Graph / Read toggle */}
           {graphData && (
             <div style={{
@@ -720,7 +910,7 @@ export default function Prism() {
                     background: viewMode === mode ? "#2E3440" : "transparent",
                     border: "none",
                     borderRadius: 6,
-                    padding: "5px 13px",
+                    padding: isMobile ? "5px 10px" : "5px 13px",
                     color: viewMode === mode ? "#ECEFF4" : "#4C566A",
                     fontSize: 11,
                     fontFamily: "'JetBrains Mono', monospace",
@@ -743,15 +933,17 @@ export default function Prism() {
               style={{
                 background: showHistory ? "#1a1d23" : "transparent",
                 border: "1px solid #2E3440", borderRadius: 8,
-                padding: "6px 14px", color: showHistory ? "#88C0D0" : "#616E88",
+                padding: isMobile ? "6px 10px" : "6px 14px",
+                color: showHistory ? "#88C0D0" : "#616E88",
                 fontSize: 11, cursor: "pointer",
                 fontFamily: "'JetBrains Mono', monospace",
-                display: "flex", alignItems: "center", gap: 6,
-                transition: "all 0.2s"
+                display: "flex", alignItems: "center", gap: 5,
+                transition: "all 0.2s", whiteSpace: "nowrap",
               }}
             >
               <span style={{ fontSize: 13 }}>☰</span>
-              {history.length} exploration{history.length !== 1 ? "s" : ""}
+              {!isMobile && `${history.length} exploration${history.length !== 1 ? "s" : ""}`}
+              {isMobile && history.length}
             </button>
           )}
         </div>
@@ -764,19 +956,19 @@ export default function Prism() {
           <div style={{
             position: "absolute", inset: 0, display: "flex",
             flexDirection: "column", alignItems: "center", justifyContent: "center",
-            zIndex: 2, padding: 40
+            zIndex: 2, padding: isMobile ? 24 : 40
           }}>
-            <div style={{ fontSize: 64, marginBottom: 16, opacity: 0.15 }}>◈</div>
+            <div style={{ fontSize: isMobile ? 48 : 64, marginBottom: 16, opacity: 0.15 }}>◈</div>
             <h2 style={{
-              fontFamily: "'Instrument Serif', serif", fontSize: 32,
+              fontFamily: "'Instrument Serif', serif", fontSize: isMobile ? 24 : 32,
               fontWeight: 400, color: "#4C566A", marginBottom: 8, textAlign: "center"
             }}>
               Every idea has ancestors.
             </h2>
-            <p style={{ color: "#3B4252", fontSize: 14, marginBottom: 32, textAlign: "center", maxWidth: 440 }}>
+            <p style={{ color: "#3B4252", fontSize: 13, marginBottom: 28, textAlign: "center", maxWidth: 400 }}>
               Enter a claim, belief, or idea — Prism will trace its intellectual lineage across civilizations, thinkers, and millennia.
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 600 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: isMobile ? 340 : 600 }}>
               {EXAMPLE_CLAIMS.map(ex => (
                 <button key={ex} onClick={() => { setClaim(ex); traceLineage(ex); }} style={{
                   background: "#1a1d2366", border: "1px solid #2E344066",
@@ -824,7 +1016,7 @@ export default function Prism() {
             position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)",
             background: "#BF616A22", border: "1px solid #BF616A44", borderRadius: 8,
             padding: "12px 20px", color: "#BF616A", fontSize: 13, zIndex: 10,
-            fontFamily: "'JetBrains Mono', monospace"
+            fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap",
           }}>
             {error}
           </div>
@@ -839,101 +1031,47 @@ export default function Prism() {
               node={selectedNode}
               onClose={() => setSelectedNode(null)}
               onExplore={(label) => { setClaim(label); traceLineage(label); }}
+              isMobile={isMobile}
             />
 
-            {/* History panel */}
-            {historyVisible && (
+            {/* Era legend — desktop only, above synthesis bar */}
+            {!isMobile && (
               <div style={{
-                position: "absolute", left: 20, top: 20,
-                width: 280, maxHeight: "calc(100% - 120px)",
-                background: "#13161cF5", border: "1px solid #2E3440",
-                borderRadius: 12, zIndex: 6, overflowY: "auto",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-                backdropFilter: "blur(12px)"
+                position: "absolute",
+                bottom: 52,
+                left: eraLegendLeft,
+                display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5, maxWidth: 300,
+                transition: "left 0.3s ease"
               }}>
-                <div style={{
-                  padding: "14px 18px 10px", borderBottom: "1px solid #2E344088",
-                  display: "flex", alignItems: "center", justifyContent: "space-between"
-                }}>
-                  <span style={{
-                    fontSize: 11, color: "#88C0D0", textTransform: "uppercase",
-                    letterSpacing: "0.1em", fontFamily: "'JetBrains Mono', monospace",
-                    fontWeight: 500
-                  }}>Explorations</span>
-                  <span style={{
+                {Object.entries(ERAS).map(([era, color]) => (
+                  <div key={era} style={{
+                    display: "flex", alignItems: "center", gap: 5,
                     fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
-                  }}>{history.length} cached</span>
-                </div>
-                <div style={{ padding: "6px 8px 8px" }}>
-                  {history.map((h) => {
-                    const isActive = h.claim === activeClaim;
-                    return (
-                      <button
-                        key={h.claim + "-" + h.timestamp}
-                        onClick={() => handleHistoryClick(h.claim)}
-                        style={{
-                          display: "flex", width: "100%", textAlign: "left",
-                          background: isActive ? "#88C0D00F" : "transparent",
-                          border: isActive ? "1px solid #88C0D025" : "1px solid transparent",
-                          borderRadius: 8, padding: "10px 12px", marginBottom: 2,
-                          color: isActive ? "#88C0D0" : "#7A8394",
-                          fontSize: 12, cursor: "pointer",
-                          fontFamily: "'Space Grotesk', sans-serif",
-                          transition: "all 0.15s", alignItems: "flex-start", gap: 10,
-                          lineHeight: 1.4
-                        }}
-                        onMouseEnter={e => {
-                          if (!isActive) { e.currentTarget.style.background = "#1a1d2388"; e.currentTarget.style.color = "#C8CED8"; }
-                        }}
-                        onMouseLeave={e => {
-                          if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#7A8394"; }
-                        }}
-                      >
-                        <span style={{
-                          color: isActive ? "#88C0D0" : "#3B4252",
-                          fontSize: 10, marginTop: 2, flexShrink: 0
-                        }}>
-                          {isActive ? "◈" : "○"}
-                        </span>
-                        <span style={{
-                          overflow: "hidden", display: "-webkit-box",
-                          WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
-                        }}>
-                          {h.claim}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                  }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+                    {era}
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Era legend — above synthesis bar, shifts right when history visible */}
-            <div style={{
-              position: "absolute",
-              bottom: 52,
-              left: historyVisible ? 320 : 20,
-              display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5, maxWidth: 300,
-              transition: "left 0.3s ease"
-            }}>
-              {Object.entries(ERAS).map(([era, color]) => (
-                <div key={era} style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  fontSize: 10, color: "#4C566A", fontFamily: "'JetBrains Mono', monospace"
-                }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
-                  {era}
-                </div>
-              ))}
-            </div>
-
-            {/* Synthesis bar */}
             <SynthesisBar
               synthesis={graphData?.synthesis}
               deepSynthesis={deepSynthesis}
               deepLoading={deepLoading}
               onReadClick={() => setViewMode("read")}
             />
+
+            {/* History panel — drawer on mobile, side panel on desktop */}
+            {historyPanelOpen && (
+              <HistoryPanel
+                history={history}
+                activeClaim={activeClaim}
+                isMobile={isMobile}
+                onClose={() => setShowHistory(false)}
+                onHistoryClick={handleHistoryClick}
+              />
+            )}
           </>
         )}
 
@@ -951,42 +1089,43 @@ export default function Prism() {
 
       {/* Input */}
       <div style={{
-        padding: "12px 24px 16px", borderTop: "1px solid #1a1d23",
+        padding: isMobile ? "10px 12px 12px" : "12px 24px 16px",
+        borderTop: "1px solid #1a1d23",
         background: "#0d1017ee", backdropFilter: "blur(12px)",
         position: "relative", zIndex: 9, flexShrink: 0
       }}>
-        <div style={{ display: "flex", gap: 10, maxWidth: 720, margin: "0 auto", alignItems: "center" }}>
-          <div style={{ position: "relative", flex: 1 }}>
-            <input
-              value={claim}
-              onChange={e => setClaim(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="What's been on your mind?"
-              disabled={loading}
-              style={{
-                width: "100%", padding: "12px 16px",
-                background: "#1a1d23", border: "1px solid #2E3440",
-                borderRadius: 10, color: "#ECEFF4", fontSize: 14,
-                fontFamily: "'Space Grotesk', sans-serif",
-                outline: "none", boxSizing: "border-box",
-                transition: "border-color 0.2s"
-              }}
-              onFocus={e => e.target.style.borderColor = "#88C0D0"}
-              onBlur={e => e.target.style.borderColor = "#2E3440"}
-            />
-          </div>
+        <div style={{ display: "flex", gap: 8, maxWidth: 720, margin: "0 auto", alignItems: "center" }}>
+          <input
+            value={claim}
+            onChange={e => setClaim(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="What's been on your mind?"
+            disabled={loading}
+            style={{
+              flex: 1, padding: isMobile ? "11px 14px" : "12px 16px",
+              background: "#1a1d23", border: "1px solid #2E3440",
+              borderRadius: 10, color: "#ECEFF4", fontSize: 14,
+              fontFamily: "'Space Grotesk', sans-serif",
+              outline: "none", boxSizing: "border-box",
+              transition: "border-color 0.2s", minWidth: 0,
+            }}
+            onFocus={e => e.target.style.borderColor = "#88C0D0"}
+            onBlur={e => e.target.style.borderColor = "#2E3440"}
+          />
           <button
             onClick={() => traceLineage()}
             disabled={loading || !claim.trim()}
             style={{
-              padding: "12px 24px", background: claim.trim() ? "#88C0D0" : "#2E3440",
-              border: "none", borderRadius: 10, color: claim.trim() ? "#0d1017" : "#4C566A",
+              padding: isMobile ? "11px 16px" : "12px 24px",
+              background: claim.trim() ? "#88C0D0" : "#2E3440",
+              border: "none", borderRadius: 10,
+              color: claim.trim() ? "#0d1017" : "#4C566A",
               fontSize: 13, fontWeight: 600, cursor: claim.trim() ? "pointer" : "default",
               fontFamily: "'Space Grotesk', sans-serif",
-              transition: "all 0.2s", whiteSpace: "nowrap"
+              transition: "all 0.2s", whiteSpace: "nowrap", flexShrink: 0,
             }}
           >
-            Trace ◈
+            {isMobile ? "◈" : "Trace ◈"}
           </button>
         </div>
       </div>
